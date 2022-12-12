@@ -1,0 +1,165 @@
+---
+title: "MA678 Midterm Project Report"
+author: "Jingyu Liang"
+date: "2022-12-08"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+library(lme4)
+library(arm)
+library(hrbrthemes)
+natgas <- read.csv("natrual_gas_daily_csv.csv")
+natgas1 <- read.csv("natural-gas-prices.csv")
+```
+
+# Abstract
+In this report, I want to find the relationship between natural gas prices and different years and different places. I set each of the years between 2010 to 2020 as one group. I also divided the prices in different places into different groups. In this case, I use the multilevel model to fit the data and do some exploratory data analysis(EDA) to visualize the data and help you to understand my analysis. Finally, I found the coefficients of different places affecting the price and the price was decreasing during 2010 to 2020.
+
+# Introduction
+Natural gas is one of the most important types of fossil fuels in the world. It's a clean-burning source of energy, which means it is harmless to the natural environment, so natural gas is used in many places in human life. For example, heating, cooling, and electricity generation rely on natural gas every day. In this case, the price of natural gas means a lot to humans. The goal of my analysis is to find the variation in the natural gas price over the years and the variation of natural gas price in different places. 
+
+# Method
+## Exploratory Data Analysis (EDA)
+
+Here are some EDA I made to visualize the data. The first plot displays the median natural gas price during 2010 to 2020. The median price is basically going down in these 11 years. In 2020, the median price of natural gas reached the lowest point. 
+
+```{r eda, echo=FALSE}
+# add a column for years to the data
+# Data Cleaning
+outputdata <- data.frame()
+medianprice <- data.frame()
+for (i in 2010:2020){
+  table <- natgas %>% slice(grep(as.character(i), natgas$Date))
+  table$Year <- as.character(i)
+  table %<>% filter(!row_number() %in% which(is.na(table$Price)))
+  mediandata <- table %>% summarise(median = median(table$Price), year = as.character(i))
+  outputdata = bind_rows(outputdata, table)
+  medianprice = bind_rows(medianprice, mediandata)
+}
+
+
+# draw a bar plot for the median price from 2010 to 2020
+
+ggplot(data = medianprice, aes(x = year, y = median)) +
+  geom_bar(position = 'dodge', stat = "identity", fill = "lightblue")+
+  xlab("year") + ylab("median price") +
+  labs(title = "median natrual gas price from 2010 to 2020")+
+  geom_text(aes(label=median), position=position_dodge(width=0.9), vjust=-0.25)
+
+```
+
+In this second plot, I wanted to show the comparison of the natural gas price variation between different countries. I used another dataset that has the natural gas prices of different countries from 2010 to 2020. We can clearly see that the prices of natural gas in German, the Netherlands, and the UK are greater than prices in the US and Canada. Therefore, north America basically has a cheaper natural gas price. Overall, the price of natural gas is going down for 11 years.
+
+```{r eda2, echo=FALSE, warning=FALSE}
+# drop NA rows
+drop <- c("Code")
+natgas1 = natgas1[,!(names(natgas1) %in% drop)]
+
+# remove other years except 2010-2020
+for (i in 1984:2009){
+  droprows <- grep(i, natgas1$Year)
+  natgas1 %<>% filter(!row_number() %in% droprows)
+}
+i = 2021
+droprows <- grep(i, natgas1$Year)
+natgas1 %<>% filter(!row_number() %in% droprows)
+
+# remove LNG and Crude Oil
+natgas1 %<>% filter(!row_number() %in% grep("LNG",natgas1$Entity))
+natgas1 %<>% filter(!row_number() %in% grep("Crude Oil",natgas1$Entity))
+
+# remove "natural gas" by separate it into another col and drop it
+natgas1 %<>% separate(col=Entity,
+                into = c("Natgas", "Places"),
+                sep = "-",
+                fill = "right") 
+natgas1 = natgas1[,!(names(natgas1) %in% c("Natgas"))]
+
+rownum = grep("German", natgas1$Places)
+natgas1[rownum,]$Places = "Average German Import price"
+
+rownum = grep("Canada", natgas1$Places)
+natgas1[rownum,]$Places = "Canada Alberta"
+
+rownum = grep("Netherlands", natgas1$Places)
+natgas1[rownum,]$Places = "Netherlands TTF"
+
+rownum = grep("UK", natgas1$Places)
+natgas1[rownum,]$Places = "UK Heren NBP Index"
+
+rownum = grep("US", natgas1$Places)
+natgas1[rownum,]$Places = "US Henry Hub"
+
+
+# plot
+ggplot(natgas1, aes(x=Year, y=Price, color=Places)) + 
+  geom_point() +
+  geom_line() +
+  theme_ipsum()
+```
+
+
+## Model Fitting
+From the above EDA, I found that the price is different between different years, so I fit a multilevel model with 11 groups, and each group indicates one year. Below is a simplest multilevel model.
+
+```{r model1,  results='hide' }
+M0 <- lmer (formula = Price ~ 1 + (1 | Year), data = outputdata)
+```
+
+We can see the estimated model coefficients with each year.
+```{r}
+coef(M0)
+```
+
+According to the 2nd plot in the above, I found place also can affect the price of natural gas. Then, I used the year as predictor and places as groups to make another multilevel model. This model is a varying-intercept regression with a single predictor Year, which means the intercept can vary by Places.
+```{r model2,  results='hide'}
+
+M1 <- lmer(formula = Price ~ Year + (1 | Places), data = natgas1)
+```
+
+We can see the estimated model coefficients with each place.
+```{r}
+coef(M1)
+```
+
+
+
+# Result
+The first model just includes a constant term and it can vary by years.
+From the 2nd model, we can get these formulas of the result:
+
+$Price = 28.04 - 0.01 \times Year$ is for Average German Import price
+
+$Price = 27.87 - 0.01 \times Year$ is for Canada (Alberta)
+
+$Price = 28.02 - 0.01 \times Year$ is for the Netherlands TTF
+
+$Price = 28.03 - 0.01 \times Year$ is for UK (Heren NBP Index)
+
+$Price = 27.90 - 0.01 \times Year$ is for US Henry Hub
+
+So, with the above formula, we can see the price of natural gas was decreasing over the years, which is the same as the result I saw in the EDA. In addition, a different place has a different effect on the price, as we can see the intercepts in different places are different. 
+
+# Discussion
+After getting the above results, I think there may exist some other factor that affects the price of natural gas, such as the temperature in a place. Temperature and place may have interactions because if this place is far to the north, the temperature must be lower than in south places, which will affect the price of natural gas. It is interesting to dig deeper in this direction.
+
+# Appendix
+The data are downloaded from these two websites.
+https://datahub.io/core/natural-gas#data-cli
+https://ourworldindata.org/grapher/natural-gas-prices
+##Citations
+Gelman, A., &amp; Hill, J. (2007). *Data analysis using regression and multilevel: Hierarchical models.* Cambridge University Press. 
+
+Holtz, Y. (n.d.). *Help and inspiration for R charts.* The R Graph Gallery. Retrieved December 11, 2022, from https://r-graph-gallery.com/ 
+
+*Why is natural gas important for society? *TC Energy. (n.d.). Retrieved December 11, 2022, from https://www.tcenergy.com/stories/2020/2020-08-06why-is-natural-gas-important-for-society/#:~:text=It%20means%20homes%2C%20businesses%2C%20cities,steel%20and%20concrete)%20and%20more. 
+
+# Supplement
+The code can be found in this GitHub link: https://github.com/JingyuClaire/midterm_project
