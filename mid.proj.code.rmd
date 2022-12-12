@@ -3,6 +3,7 @@ title: "MA678 Midterm Project Report"
 author: "Jingyu Liang"
 date: "2022-12-08"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 ---
@@ -101,8 +102,7 @@ natgas1[rownum,]$Places = "US Henry Hub"
 # plot
 ggplot(natgas1, aes(x=Year, y=Price, color=Places)) + 
   geom_point() +
-  geom_line() +
-  theme_ipsum()
+  geom_line() 
 ```
 
 
